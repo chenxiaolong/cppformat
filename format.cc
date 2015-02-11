@@ -444,6 +444,9 @@ const uint64_t fmt::internal::BasicData<T>::POWERS_OF_10_64[] = {
 };
 
 FMT_FUNC void fmt::internal::report_unknown_type(char code, const char *type) {
+#if !FMT_EXCEPTIONS
+  (void) type;
+#endif
   if (std::isprint(static_cast<unsigned char>(code))) {
     FMT_THROW(fmt::FormatError(
         fmt::format("unknown format code '{}' for {}", code, type)));
@@ -713,6 +716,9 @@ void fmt::internal::PrintfFormatter<Char>::parse_flags(
 template <typename Char>
 Arg fmt::internal::PrintfFormatter<Char>::get_arg(
     const Char *s, unsigned arg_index) {
+#if !FMT_EXCEPTIONS
+  (void) s;
+#endif
   const char *error = 0;
   Arg arg = arg_index == UINT_MAX ?
     next_arg(error) : FormatterBase::get_arg(arg_index - 1, error);
