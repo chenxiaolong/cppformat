@@ -29,16 +29,16 @@
 #define FMT_GTEST_EXTRA_H_
 
 #include <string>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "format.h"
+#include "fmt/core.h"
 
 #ifndef FMT_USE_FILE_DESCRIPTORS
 # define FMT_USE_FILE_DESCRIPTORS 0
 #endif
 
 #if FMT_USE_FILE_DESCRIPTORS
-# include "posix.h"
+# include "fmt/posix.h"
 #endif
 
 #define FMT_TEST_THROW_(statement, expected_exception, expected_message, fail) \
@@ -81,10 +81,10 @@
   FMT_TEST_THROW_(statement, expected_exception, \
       expected_message, GTEST_NONFATAL_FAILURE_)
 
-std::string format_system_error(int error_code, fmt::StringRef message);
+std::string format_system_error(int error_code, fmt::string_view message);
 
 #define EXPECT_SYSTEM_ERROR(statement, error_code, message) \
-  EXPECT_THROW_MSG(statement, fmt::SystemError, \
+  EXPECT_THROW_MSG(statement, fmt::system_error, \
       format_system_error(error_code, message))
 
 #if FMT_USE_FILE_DESCRIPTORS
@@ -104,7 +104,7 @@ class OutputRedirect {
 
  public:
   explicit OutputRedirect(FILE *file);
-  ~OutputRedirect() FMT_NOEXCEPT(true);
+  ~OutputRedirect() FMT_NOEXCEPT;
 
   // Restores the original file, reads output from the pipe into a string
   // and returns it.
@@ -133,6 +133,49 @@ class OutputRedirect {
 #define EXPECT_WRITE(file, statement, expected_output) \
     FMT_TEST_WRITE_(statement, expected_output, file, GTEST_NONFATAL_FAILURE_)
 
+#ifdef _MSC_VER
+
+// Suppresses Windows assertions on invalid file descriptors, making
+// POSIX functions return proper error codes instead of crashing on Windows.
+class SuppressAssert {
+ private:
+  _invalid_parameter_handler original_handler_;
+  int original_report_mode_;
+
+  static void handle_invalid_parameter(const wchar_t *,
+      const wchar_t *, const wchar_t *, unsigned , uintptr_t) {}
+
+ public:
+  SuppressAssert()
+  : original_handler_(_set_invalid_parameter_handler(handle_invalid_parameter)),
+    original_report_mode_(_CrtSetReportMode(_CRT_ASSERT, 0)) {
+  }
+  ~SuppressAssert() {
+    _set_invalid_parameter_handler(original_handler_);
+    _CrtSetReportMode(_CRT_ASSERT, original_report_mode_);
+  }
+};
+
+# define SUPPRESS_ASSERT(statement) { SuppressAssert sa; statement; }
+#else
+# define SUPPRESS_ASSERT(statement) statement
+#endif  // _MSC_VER
+
+#define EXPECT_SYSTEM_ERROR_NOASSERT(statement, error_code, message) \
+  EXPECT_SYSTEM_ERROR(SUPPRESS_ASSERT(statement), error_code, message)
+
+// Attempts to read count characters from a file.
+std::string read(fmt::File &f, std::size_t count);
+
+#define EXPECT_READ(file, expected_content) \
+  EXPECT_EQ(expected_content, read(file, std::strlen(expected_content)))
+
 #endif  // FMT_USE_FILE_DESCRIPTORS
+
+template <typename Mock>
+struct ScopedMock : testing::StrictMock<Mock> {
+  ScopedMock() { Mock::instance = this; }
+  ~ScopedMock() { Mock::instance = 0; }
+};
 
 #endif  // FMT_GTEST_EXTRA_H_

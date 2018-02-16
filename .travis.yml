@@ -1,23 +1,37 @@
 language: cpp
+dist: trusty
+sudo: required # the doc target uses sudo to install dependencies
 
 os:
   - linux
   - osx
 
-before_install:
-  - if [ $TRAVIS_OS_NAME == osx ]; then curl http://www.cmake.org/files/v2.8/cmake-2.8.12.2-Darwin64-universal.tar.gz -o cmake.tar.gz; fi
-  - if [ $TRAVIS_OS_NAME == osx ]; then tar xzf cmake.tar.gz; fi
-  - if [ $TRAVIS_OS_NAME == osx ]; then export PATH=$PATH:"cmake-2.8.12.2-Darwin64-universal/CMake 2.8-12.app/Contents/bin"; fi
-  - git submodule update --init
-
 env:
-  - BUILD_TYPE=Debug
-  - BUILD_TYPE=Release
+  global:
+    - secure: |-
+        Gsnp9ERFnXt+diCfc7Vb72g+7HDn1MCHvw4zfUDdoBh9bxxFlLQRlzZZfwWhzni57lflrt
+        0QHXafu+oBVOJuNv6WauV3+ZyuWIQRmNGjZFNLvZsXHK/dyad2vGQBPvEkb+8l/aCyTpbr
+        6pxmyzLHSn1ZR7OX5rfPvwM3tOyZ3H0=
+  matrix:
+    - BUILD=Doc
+    - BUILD=Debug STANDARD=14
+    - BUILD=Release STANDARD=14
+
+matrix:
+  exclude:
+    - os: osx
+      env: BUILD=Doc
+
+# Install gcc-6 for extended constexpr support.
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - g++-6
+
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CXX=g++-6; fi
 
 script:
-  - cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DFMT_EXTRA_TESTS=ON .
-  - make -j4
-  - CTEST_OUTPUT_ON_FAILURE=1 make test
-
-after_failure:
-  - cat Testing/Temporary/LastTest.log
+  - support/travis-build.py

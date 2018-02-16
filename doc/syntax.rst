@@ -4,8 +4,9 @@
 Format String Syntax
 ********************
 
-Formatting functions such as :ref:`fmt::format() <format>` and :ref:`fmt::print() <print>`
-use the same format string syntax described in this section.
+Formatting functions such as :ref:`fmt::format() <format>` and
+:ref:`fmt::print() <print>` use the same format string syntax described in this
+section.
 
 Format strings contain "replacement fields" surrounded by curly braces ``{}``.
 Anything that is not contained in braces is considered literal text, which is
@@ -15,20 +16,27 @@ literal text, it can be escaped by doubling: ``{{`` and ``}}``.
 The grammar for a replacement field is as follows:
 
 .. productionlist:: sf
-   replacement_field: "{" [`arg_index`] [":" `format_spec`] "}"
-   arg_index: `integer`
+   replacement_field: "{" [`arg_id`] [":" `format_spec`] "}"
+   arg_id: `integer` | `identifier`
+   integer: `digit`+
+   digit: "0"..."9"
+   identifier: `id_start` `id_continue`*
+   id_start: "a"..."z" | "A"..."Z" | "_"
+   id_continue: `id_start` | `digit`
 
-In less formal terms, the replacement field can start with an *arg_index*
+In less formal terms, the replacement field can start with an *arg_id*
 that specifies the argument whose value is to be formatted and inserted into
 the output instead of the replacement field.
-The *arg_index* is optionally followed by a *format_spec*, which is preceded
+The *arg_id* is optionally followed by a *format_spec*, which is preceded
 by a colon ``':'``.  These specify a non-default format for the replacement value.
 
 See also the :ref:`formatspec` section.
 
-If the numerical arg_indexes in a format string are 0, 1, 2, ... in sequence,
+If the numerical arg_ids in a format string are 0, 1, 2, ... in sequence,
 they can all be omitted (not just some) and the numbers 0, 1, 2, ... will be
 automatically inserted in that order.
+
+Named arguments can be referred to by their names or indices.
 
 Some simple format string examples::
 
@@ -44,12 +52,10 @@ mini-language" or interpretation of the *format_spec*.
 Most built-in types support a common formatting mini-language, which is
 described in the next section.
 
-A *format_spec* field can also include nested replacement fields within it.
-These nested replacement fields can contain only an argument index;
-format specifications are not allowed.  Formatting is performed as if the
-replacement fields within the format_spec are substituted before the
-*format_spec* string is interpreted.  This allows the formatting of a value
-to be dynamically specified.
+A *format_spec* field can also include nested replacement fields in certain
+positions within it. These nested replacement fields can contain only an
+argument id; format specifications are not allowed. This allows the formatting
+of a value to be dynamically specified.
 
 See the :ref:`formatexamples` section for some examples.
 
@@ -60,7 +66,7 @@ Format Specification Mini-Language
 
 "Format specifications" are used within replacement fields contained within a
 format string to define how individual values are presented (see
-:ref:`formatstrings`).  Each formattable type may define how the format
+:ref:`syntax`).  Each formattable type may define how the format
 specification is to be interpreted.
 
 Most built-in types implement the following options for format specifications,
@@ -73,10 +79,10 @@ The general form of a *standard format specifier* is:
    fill: <a character other than '{' or '}'>
    align: "<" | ">" | "=" | "^"
    sign: "+" | "-" | " "
-   width: `integer`
-   precision: `integer` | "{" `arg_index` "}"
-   type: `int_type` | "c" | "e" | "E" | "f" | "F" | "g" | "G" | "p" | "s"
-   int_type: "b" | "B" | "d" | "o" | "x" | "X"
+   width: `integer` | "{" `arg_id` "}"
+   precision: `integer` | "{" `arg_id` "}"
+   type: `int_type` | "a" | "A" | "c" | "e" | "E" | "f" | "F" | "g" | "G" | "p" | "s"
+   int_type: "b" | "B" | "d" | "n" | "o" | "x" | "X"
 
 The *fill* character can be any character other than '{' or '}'.  The presence
 of a fill character is signaled by the character following it, which must be
@@ -157,8 +163,8 @@ displayed after the decimal point for a floating-point value formatted with
 ``'f'`` and ``'F'``, or before and after the decimal point for a floating-point
 value formatted with ``'g'`` or ``'G'``.  For non-number types the field
 indicates the maximum field size - in other words, how many characters will be
-used from the field content. The *precision* is not allowed for integer values
-or pointers.
+used from the field content. The *precision* is not allowed for integer,
+character, Boolean, and pointer values.
 
 Finally, the *type* determines how the data should be presented.
 
@@ -211,8 +217,16 @@ The available integer presentation types are:
 |         | ``'#'`` option with this type adds the prefix ``"0X"``   |
 |         | to the output value.                                     |
 +---------+----------------------------------------------------------+
+| ``'n'`` | Number. This is the same as ``'d'``, except that it uses |
+|         | the current locale setting to insert the appropriate     |
+|         | number separator characters.                             |
++---------+----------------------------------------------------------+
 | none    | The same as ``'d'``.                                     |
 +---------+----------------------------------------------------------+
+
+Integer presentation types can also be used with character and Boolean values.
+Boolean values are formatted using textual representation, either ``true`` or
+``false``, if the presentation type is not specified.
 
 The available presentation types for floating-point values are:
 
@@ -221,7 +235,7 @@ The available presentation types for floating-point values are:
 +=========+==========================================================+
 | ``'a'`` | Hexadecimal floating point format. Prints the number in  |
 |         | base 16 with prefix ``"0x"`` and lower-case letters for  |
-|         | digits above 9. Uses 'p' to indicate the exponent.       |
+|         | digits above 9. Uses ``'p'`` to indicate the exponent.   |
 +---------+----------------------------------------------------------+
 | ``'A'`` | Same as ``'a'`` except it uses upper-case letters for    |
 |         | the prefix, digits above 9 and to indicate the exponent. |
@@ -252,6 +266,8 @@ The available presentation types for floating-point values are:
 +---------+----------------------------------------------------------+
 | none    | The same as ``'g'``.                                     |
 +---------+----------------------------------------------------------+
+
+Floating-point formatting is locale-dependent.
 
 .. ifconfig:: False
 
@@ -322,6 +338,16 @@ Aligning the text and specifying a width::
    format("{:*^30}", "centered");  // use '*' as a fill char
    // Result: "***********centered***********"
 
+Dynamic width::
+
+   format("{:<{}}", "left aligned", 30);
+   // Result: "left aligned                  "
+
+Dynamic precision::
+
+   format("{:.{}f}", 3.14, 1);
+   // Result: "3.1"
+
 Replacing ``%+f``, ``%-f``, and ``% f`` and specifying a sign::
 
    format("{:+f}; {:+f}", 3.14, -3.14);  // show it always
@@ -345,13 +371,6 @@ Replacing ``%x`` and ``%o`` and converting the value to different bases::
 
       format("{:,}", 1234567890);
       '1,234,567,890'
-
-   Expressing a percentage::
-
-      >>> points = 19
-      >>> total = 22
-      Format("Correct answers: {:.2%}") << points/total)
-      'Correct answers: 86.36%'
 
    Using type-specific formatting::
 

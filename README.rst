@@ -1,58 +1,66 @@
-C++ Format
-==========
+{fmt}
+=====
 
-.. image:: https://travis-ci.org/cppformat/cppformat.png?branch=master
-  :target: https://travis-ci.org/cppformat/cppformat
+.. image:: https://travis-ci.org/fmtlib/fmt.png?branch=master
+   :target: https://travis-ci.org/fmtlib/fmt
 
-.. image:: https://ci.appveyor.com/api/projects/status/qk0bhyhqp1ekpat8
-  :target: https://ci.appveyor.com/project/vitaut/cppformat
-
-.. image:: https://readthedocs.org/projects/cppformat/badge/?version=stable
-   :target: http://cppformat.readthedocs.org/en/stable/
-   :alt: Documentation Status
+.. image:: https://ci.appveyor.com/api/projects/status/ehjkiefde6gucy1v
+   :target: https://ci.appveyor.com/project/vitaut/fmt
    
-.. image:: https://webapi.biicode.com/v1/badges/vitaut/vitaut/cppformat/master
-  :target: https://www.biicode.com/vitaut/cppformat
+.. image:: https://badges.gitter.im/Join%20Chat.svg
+   :alt: Join the chat at https://gitter.im/fmtlib/fmt
+   :target: https://gitter.im/fmtlib/fmt
 
-C++ Format is an open-source formatting library for C++.
+**{fmt}** is an open-source formatting library for C++.
 It can be used as a safe alternative to printf or as a fast
 alternative to IOStreams.
+
+`Documentation <http://fmtlib.net/latest/>`_
+
+This is a development branch, released versions are available from the
+`Releases page <https://github.com/fmtlib/fmt/releases>`__.
 
 Features
 --------
 
-* Two APIs: faster concatenation-based write API and slower (but still
-  very fast) replacement-based format API with positional arguments for
+* Two APIs: faster concatenation-based `write API
+  <http://fmtlib.net/latest/api.html#write-api>`_ and slower, but still very
+  fast, replacement-based `format API
+  <http://fmtlib.net/latest/api.html#format-api>`_ with positional arguments for
   localization.
-* Write API similar to the one used by IOStreams but much faster and more
-  consistent.
-* Format API with `format string syntax
-  <http://cppformat.readthedocs.org/en/latest/syntax.html>`_
+* Write API similar to the one used by IOStreams but stateless allowing faster
+  implementation.
+* Format API with `format string syntax <http://fmtlib.net/latest/syntax.html>`_
   similar to the one used by `str.format
-  <http://docs.python.org/2/library/stdtypes.html#str.format>`_ in Python.
+  <https://docs.python.org/2/library/stdtypes.html#str.format>`_ in Python.
+* Safe `printf implementation
+  <http://fmtlib.net/latest/api.html#printf-formatting-functions>`_ including
+  the POSIX extension for positional arguments.
 * Support for user-defined types.
-* High speed: performance of the format API is close to that of
-  glibc's `printf <http://en.cppreference.com/w/cpp/io/c/fprintf>`_
-  and better than performance of IOStreams. See `Speed tests`_ and
+* High speed: performance of the format API is close to that of glibc's `printf
+  <http://en.cppreference.com/w/cpp/io/c/fprintf>`_ and better than the
+  performance of IOStreams. See `Speed tests`_ and
   `Fast integer to string conversion in C++
   <http://zverovich.net/2013/09/07/integer-to-string-conversion-in-cplusplus.html>`_.
-* Small code size both in terms of source code (format consists of a single
-  header file and a single source file) and compiled code.
+* Small code size both in terms of source code (the core library consists of two
+  header files and a single source file) and compiled code.
   See `Compile time and code bloat`_.
 * Reliability: the library has an extensive set of `unit tests
-  <https://github.com/cppformat/cppformat/tree/master/test>`_.
-* Safety: the library is fully type safe, errors in format strings are
-  reported using exceptions, automatic memory management prevents buffer
-  overflow errors.
+  <https://github.com/fmtlib/fmt/tree/master/test>`_.
+* Safety: the library is fully type safe, errors in format strings can be
+  reported at compile time, automatic memory management prevents buffer overflow
+  errors.
 * Ease of use: small self-contained code base, no external dependencies,
-  permissive BSD `license`_.
-* `Portability <http://cppformat.github.io#portability>`_ with consistent output
-  across platforms and support for older compilers.
+  permissive BSD `license
+  <https://github.com/fmtlib/fmt/blob/master/LICENSE.rst>`_
+* `Portability <http://fmtlib.net/latest/index.html#portability>`_ with
+  consistent output across platforms and support for older compilers.
 * Clean warning-free codebase even on high warning levels
-  (-Wall -Wextra -pedantic).
+  (``-Wall -Wextra -pedantic``).
 * Support for wide strings.
+* Optional header-only configuration enabled with the ``FMT_HEADER_ONLY`` macro.
 
-See the `documentation <http://cppformat.readthedocs.org/en/stable/>`_ for more details.
+See the `documentation <http://fmtlib.net/latest/>`_ for more details.
 
 Examples
 --------
@@ -71,7 +79,29 @@ Arguments can be accessed by position and arguments' indices can be repeated:
     std::string s = fmt::format("{0}{1}{0}", "abra", "cad");
     // s == "abracadabra"
 
-C++ Format can be used as a safe portable replacement for ``itoa``:
+Format strings can be checked at compile time:
+
+.. code:: c++
+
+    // test.cc
+    using namespace fmt::literals;
+    std::string s = "{2}"_format(42);
+
+.. code::
+
+    $ g++ -Iinclude test.cc -std=c++14
+    ...
+    test.cc:5:31: note: in instantiation of function template specialization
+    'fmt::internal::udl_formatter<char, '{', '2', '}'>::operator()<int>' requested
+    here
+      std::string s = "{2}"_format(42);
+                                  ^
+    include/fmt/format.h:3838:7: note: non-constexpr function 'on_error' cannot be
+    used in a constant expression
+          on_error("argument index out of range");
+          ^
+
+{fmt} can be used as a safe portable replacement for ``itoa``:
 
 .. code:: c++
 
@@ -84,6 +114,8 @@ An object of any user-defined type for which there is an overloaded
 :code:`std::ostream` insertion operator (``operator<<``) can be formatted:
 
 .. code:: c++
+
+    #include "fmt/ostream.h"
 
     class Date {
       int year_, month_, day_;
@@ -98,27 +130,27 @@ An object of any user-defined type for which there is an overloaded
     std::string s = fmt::format("The date is {}", Date(2012, 12, 9));
     // s == "The date is 2012-12-9"
 
-You can use the `FMT_VARIADIC
-<http://cppformat.readthedocs.org/en/latest/reference.html#utilities>`_
-macro to create your own functions similar to `format
-<http://cppformat.readthedocs.org/en/latest/reference.html#format>`_ and
-`print <http://cppformat.readthedocs.org/en/latest/reference.html#print>`_
+You can create your own functions similar to `format
+<http://fmtlib.net/latest/api.html#format>`_ and
+`print <http://fmtlib.net/latest/api.html#print>`_
 which take arbitrary arguments:
 
 .. code:: c++
 
     // Prints formatted error message.
-    void report_error(const char *format, fmt::ArgList args) {
+    void vreport_error(const char *format, fmt::args args) {
       fmt::print("Error: ");
-      fmt::print(format, args);
+      fmt::vprint(format, args);
     }
-    FMT_VARIADIC(void, report_error, const char *)
+    template <typename... Args>
+    void report_error(const char *format, const Args & ... args) {
+      vreport_error(format, fmt::make_args(args));
+    }
 
     report_error("file not found: {}", path);
 
-Note that you only need to define one function that takes ``fmt::ArgList``
-argument. ``FMT_VARIADIC`` automatically defines necessary wrappers that
-accept variable number of arguments.
+Note that ``vreport_error`` is not parameterized on argument types which can
+improve compile times and reduce code size compared to fully parameterized version.
 
 Projects using this library
 ---------------------------
@@ -128,31 +160,68 @@ Projects using this library
 * `AMPL/MP <https://github.com/ampl/mp>`_:
   An open-source library for mathematical programming
 
-* `HarpyWar/pvpgn <https://github.com/HarpyWar/pvpgn>`_:
+* `CUAUV <http://cuauv.org/>`_: Cornell University's autonomous underwater vehicle
+
+* `HarpyWar/pvpgn <https://github.com/pvpgn/pvpgn-server>`_:
   Player vs Player Gaming Network with tweaks
 
-* `KBEngine <http://www.kbengine.org/>`_: An open-source MMOG server engine
+* `KBEngine <http://kbengine.org/>`_: An open-source MMOG server engine
+
+* `Keypirinha <http://keypirinha.com/>`_: A semantic launcher for Windows
+
+* `Kodi <https://kodi.tv/>`_ (formerly xbmc): Home theater software
 
 * `Lifeline <https://github.com/peter-clark/lifeline>`_: A 2D game
+
+* `Drake <http://drake.mit.edu/>`_: A planning, control, and analysis toolbox
+  for nonlinear dynamical systems (MIT)
+
+* `Envoy <https://lyft.github.io/envoy/>`_: C++ L7 proxy and communication bus
+  (Lyft)
+
+* `FiveM <https://fivem.net/>`_: a modification framework for GTA V
+
+* `MongoDB Smasher <https://github.com/duckie/mongo_smasher>`_: A small tool to
+  generate randomized datasets
+
+* `OpenSpace <http://openspaceproject.com/>`_: An open-source astrovisualization
+  framework
 
 * `PenUltima Online (POL) <http://www.polserver.com/>`_:
   An MMO server, compatible with most Ultima Online clients
 
+* `quasardb <https://www.quasardb.net/>`_: A distributed, high-performance,
+  associative database
+
 * `readpe <https://bitbucket.org/sys_dev/readpe>`_: Read Portable Executable
 
-* `Saddy <https://code.google.com/p/saddy/>`_:
+* `redis-cerberus <https://github.com/HunanTV/redis-cerberus>`_: A Redis cluster proxy
+
+* `Saddy <https://github.com/mamontov-cpp/saddy-graphics-engine-2d>`_:
   Small crossplatform 2D graphic engine
 
 * `Salesforce Analytics Cloud <http://www.salesforce.com/analytics-cloud/overview/>`_:
   Business intelligence software
 
+* `Scylla <http://www.scylladb.com/>`_: A Cassandra-compatible NoSQL data store that can handle
+  1 million transactions per second on a single server
+
+* `Seastar <http://www.seastar-project.org/>`_: An advanced, open-source C++ framework for
+  high-performance server applications on modern hardware
+
 * `spdlog <https://github.com/gabime/spdlog>`_: Super fast C++ logging library
+
+* `Stellar <https://www.stellar.org/>`_: Financial platform
+
+* `Touch Surgery <https://www.touchsurgery.com/>`_: Surgery simulator
+
+* `TrinityCore <https://github.com/TrinityCore/TrinityCore>`_: Open-source MMORPG framework
 
 `More... <https://github.com/search?q=cppformat&type=Code>`_
 
 If you are aware of other projects using this library, please let me know
 by `email <mailto:victor.zverovich@gmail.com>`_ or by submitting an
-`issue <https://github.com/cppformat/cppformat/issues>`_.
+`issue <https://github.com/fmtlib/fmt/issues>`_.
 
 Motivation
 ----------
@@ -168,13 +237,13 @@ all the features I needed.
 Printf
 ~~~~~~
 
-The good thing about printf is that it is very fast and readily available
+The good thing about printf is that it is pretty fast and readily available
 being a part of the C standard library. The main drawback is that it
 doesn't support user-defined types. Printf also has safety issues although
-they are mostly solved with `_attribute__ ((format (printf, ...))
+they are mostly solved with `__attribute__ ((format (printf, ...))
 <http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html>`_ in GCC.
 There is a POSIX extension that adds positional arguments required for
-`i18n <http://en.wikipedia.org/wiki/Internationalization_and_localization>`_
+`i18n <https://en.wikipedia.org/wiki/Internationalization_and_localization>`_
 to printf but it is not a part of C99 and may not be available on some
 platforms.
 
@@ -238,9 +307,8 @@ Tinyformat
 
 This library supports printf-like format strings and is very small and
 fast. Unfortunately it doesn't support positional arguments and wrapping
-it in C++98 is somewhat difficult.  However if you only need a type-safe
-printf replacement with support for user-defined types, I highly recommend
-this library.
+it in C++98 is somewhat difficult. Also its performance and code compactness
+are limited by IOStreams.
 
 Boost Spirit.Karma
 ~~~~~~~~~~~~~~~~~~
@@ -264,23 +332,24 @@ The following speed tests results were generated by building
 runs.  In the test, the format string ``"%0.10f:%04d:%+g:%s:%p:%c:%%\n"`` or
 equivalent is filled 2000000 times with output sent to ``/dev/null``; for
 further details see the `source
-<https://github.com/cppformat/format-benchmark/blob/master/tinyformat_test.cpp>`_.
+<https://github.com/fmtlib/format-benchmark/blob/master/tinyformat_test.cpp>`_.
 
-============== ========
-test name      run time
-============== ========
-libc printf     1.30s
-std::ostream    1.85s
-cppformat       1.42s
-tinyformat      2.25s
-boost::format   9.94s
-============== ========
+================= ============= ===========
+Library           Method        Run Time, s
+================= ============= ===========
+libc              printf          1.35
+libc++            std::ostream    3.42
+fmt 534bff7       fmt::print      1.56
+tinyformat 2.0.1  tfm::printf     3.73
+Boost Format 1.54 boost::format   8.44
+Folly Format      folly::format   2.54
+================= ============= ===========
 
-As you can see boost::format is much slower than the alternative methods; this
+As you can see ``boost::format`` is much slower than the alternative methods; this
 is confirmed by `other tests <http://accu.org/index.php/journals/1539>`_.
 Tinyformat is quite good coming close to IOStreams.  Unfortunately tinyformat
 cannot be faster than the IOStreams because it uses them internally.
-Performance of cppformat is close to that of printf, being `faster than printf on integer
+Performance of fmt is close to that of printf, being `faster than printf on integer
 formatting <http://zverovich.net/2013/09/07/integer-to-string-conversion-in-cplusplus.html>`_,
 but slower on floating-point formatting which dominates this benchmark.
 
@@ -288,43 +357,50 @@ Compile time and code bloat
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The script `bloat-test.py
-<https://github.com/cppformat/format-benchmark/blob/master/bloat-test.py>`_
-from `format-benchmark <https://github.com/cppformat/format-benchmark>`_
+<https://github.com/fmtlib/format-benchmark/blob/master/bloat-test.py>`_
+from `format-benchmark <https://github.com/fmtlib/format-benchmark>`_
 tests compile time and code bloat for nontrivial projects.
 It generates 100 translation units and uses ``printf()`` or its alternative
 five times in each to simulate a medium sized project.  The resulting
-executable size and compile time (g++-4.8.1, Ubuntu GNU/Linux 13.10,
-best of three) is shown in the following tables.
+executable size and compile time (Apple LLVM version 8.1.0 (clang-802.0.42),
+macOS Sierra, best of three) is shown in the following tables.
 
 **Optimized build (-O3)**
 
-============ =============== ==================== ==================
-Method       Compile Time, s Executable size, KiB Stripped size, KiB
-============ =============== ==================== ==================
-printf                   2.6                   41                 30
-IOStreams               19.4                   92                 70
-C++ Format              46.8                   46                 34
-tinyformat              64.6                  418                386
-Boost Format           222.8                  990                923
-============ =============== ==================== ==================
+============= =============== ==================== ==================
+Method        Compile Time, s Executable size, KiB Stripped size, KiB
+============= =============== ==================== ==================
+printf                    2.7                   29                 26
+printf+string            18.4                   29                 26
+IOStreams                34.6                   59                 55
+fmt                      22.0                   37                 34
+tinyformat               51.8                  103                 97
+Boost Format            120.5                  762                739
+Folly Format            158.7                  102                 87
+============= =============== ==================== ==================
 
-As you can see, C++ Format has 80% less overhead in terms of resulting
-code size compared to IOStreams and comes pretty close to ``printf``.
-Boost Format has by far the largest overheads.
+As you can see, fmt has 60% less overhead in terms of resulting binary code
+size compared to IOStreams and comes pretty close to ``printf``. Boost Format
+has by far the largest overheads.
+
+``printf+string`` is the same as ``printf`` but with extra ``<string>``
+include to measure the overhead of the latter.
 
 **Non-optimized build**
 
-============ =============== ==================== ==================
-Method       Compile Time, s Executable size, KiB Stripped size, KiB
-============ =============== ==================== ==================
-printf                   2.1                   41                 30
-IOStreams               19.7                   86                 62
-C++ Format              47.9                  108                 86
-tinyformat              27.7                  234                190
-Boost Format           122.6                  884                763
-============ =============== ==================== ==================
+============= =============== ==================== ==================
+Method        Compile Time, s Executable size, KiB Stripped size, KiB
+============= =============== ==================== ==================
+printf                    2.4                   33                 30
+printf+string            18.5                   33                 30
+IOStreams                31.9                   56                 52
+fmt                      20.9                   56                 51
+tinyformat               38.9                   88                 82
+Boost Format             64.8                  366                304
+Folly Format            113.5                  442                428
+============= =============== ==================== ==================
 
-``libc``, ``libstdc++`` and ``libformat`` are all linked as shared
+``libc``, ``lib(std)c++`` and ``libfmt`` are all linked as shared
 libraries to compare formatting function overhead only. Boost Format
 and tinyformat are header-only libraries so they don't provide any
 linkage options.
@@ -335,14 +411,14 @@ Running the tests
 Please refer to `Building the library`__ for the instructions on how to build
 the library and run the unit tests.
 
-__ http://cppformat.readthedocs.org/en/latest/usage.html#building-the-library
+__ http://fmtlib.net/latest/usage.html#building-the-library
 
 Benchmarks reside in a separate repository,
-`format-benchmarks <https://github.com/cppformat/format-benchmark>`_,
+`format-benchmarks <https://github.com/fmtlib/format-benchmark>`_,
 so to run the benchmarks you first need to clone this repository and
 generate Makefiles with CMake::
 
-    $ git clone --recursive https://github.com/cppformat/format-benchmark.git
+    $ git clone --recursive https://github.com/fmtlib/format-benchmark.git
     $ cd format-benchmark
     $ cmake .
 
@@ -357,44 +433,29 @@ or the bloat test::
 License
 -------
 
-Copyright (c) 2012, Victor Zverovich
-
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-Documentation License
----------------------
+fmt is distributed under the BSD `license
+<https://github.com/fmtlib/fmt/blob/master/LICENSE.rst>`_.
 
 The `Format String Syntax
-<http://cppformat.readthedocs.org/en/latest/#format-string-syntax>`_
+<http://fmtlib.net/latest/syntax.html>`_
 section in the documentation is based on the one from Python `string module
-documentation <http://docs.python.org/3/library/string.html#module-string>`_
+documentation <https://docs.python.org/3/library/string.html#module-string>`_
 adapted for the current library. For this reason the documentation is
 distributed under the Python Software Foundation license available in
-`doc/LICENSE.python
-<https://raw.github.com/cppformat/cppformat/master/doc/LICENSE.python>`_.
+`doc/python-license.txt
+<https://raw.github.com/fmtlib/fmt/master/doc/python-license.txt>`_.
+It only applies if you distribute the documentation of fmt.
 
 Acknowledgments
 ---------------
+
+The fmt library is maintained by Victor Zverovich (`vitaut
+<https://github.com/vitaut>`_) and Jonathan Müller (`foonathan
+<https://github.com/foonathan>`_) with contributions from many other people.
+See `Contributors <https://github.com/fmtlib/fmt/graphs/contributors>`_ and
+`Releases <https://github.com/fmtlib/fmt/releases>`_ for some of the names.
+Let us know if your contribution is not listed or mentioned incorrectly and
+we'll make it right.
 
 The benchmark section of this readme file and the performance tests are taken
 from the excellent `tinyformat <https://github.com/c42f/tinyformat>`_ library
@@ -413,3 +474,5 @@ formatting. Thanks `Ruslan Baratov <https://github.com/ruslo>`_ for comprehensiv
 `comparison of integer formatting algorithms <https://github.com/ruslo/int-dec-format-tests>`_
 and useful comments regarding performance, `Boris Kaul <https://github.com/localvoid>`_ for
 `C++ counting digits benchmark <https://github.com/localvoid/cxx-benchmark-count-digits>`_.
+Thanks to `CarterLi <https://github.com/CarterLi>`_ for contributing various
+improvements to the code.

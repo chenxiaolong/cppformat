@@ -1,36 +1,71 @@
-cmake_minimum_required(VERSION 2.6)
+message(STATUS "CMake version: ${CMAKE_VERSION}")
+
+cmake_minimum_required(VERSION 2.8.12)
+
+# Determine if fmt is built as a subproject (using add_subdirectory)
+# or if it is the master project.
+set(MASTER_PROJECT OFF)
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  set(MASTER_PROJECT ON)
+endif ()
+
+# Joins arguments and places the results in ${result_var}.
+function(join result_var)
+  set(result )
+  foreach (arg ${ARGN})
+    set(result "${result}${arg}")
+  endforeach ()
+  set(${result_var} "${result}" PARENT_SCOPE)
+endfunction()
 
 # Set the default CMAKE_BUILD_TYPE to Release.
 # This should be done before the project command since the latter can set
 # CMAKE_BUILD_TYPE itself (it does so for nmake).
 if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING
-    "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel.")
+  join(doc "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or "
+           "CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING ${doc})
 endif ()
 
-option(FMT_EXTRA_TESTS "Enable extra tests." OFF)
+option(FMT_PEDANTIC "Enable extra warnings and expensive tests." OFF)
 
-project(FORMAT)
+# Options that control generation of various targets.
+option(FMT_DOC "Generate the doc target." ${MASTER_PROJECT})
+option(FMT_INSTALL "Generate the install target." ${MASTER_PROJECT})
+option(FMT_TEST "Generate the test target." ${MASTER_PROJECT})
+option(FMT_USE_CPP14 "Enable the addition of C++14 compiler flags." ON)
+
+project(FMT)
+
+# Get version from core.h
+file(READ include/fmt/core.h core_h)
+if (NOT core_h MATCHES "FMT_VERSION ([0-9]+)([0-9][0-9])([0-9][0-9])")
+  message(FATAL_ERROR "Cannot get FMT_VERSION from core.h.")
+endif ()
+# Use math to skip leading zeros if any.
+math(EXPR CPACK_PACKAGE_VERSION_MAJOR ${CMAKE_MATCH_1})
+math(EXPR CPACK_PACKAGE_VERSION_MINOR ${CMAKE_MATCH_2})
+math(EXPR CPACK_PACKAGE_VERSION_PATCH ${CMAKE_MATCH_3})
+join(FMT_VERSION ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.
+                 ${CPACK_PACKAGE_VERSION_PATCH})
+message(STATUS "Version: ${FMT_VERSION}")
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag(-std=c++11 HAVE_STD_CPP11_FLAG)
-if (HAVE_STD_CPP11_FLAG)
-  set(CPP11_FLAG -std=c++11)
-else ()
-  check_cxx_compiler_flag(-std=c++0x HAVE_STD_CPP0X_FLAG)
-  if (HAVE_STD_CPP0X_FLAG)
-    set(CPP11_FLAG -std=c++0x)
-  endif ()
-endif ()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+  "${CMAKE_CURRENT_SOURCE_DIR}/support/cmake")
 
-if (CMAKE_GENERATOR MATCHES "Visual Studio")
+include(cxx14)
+
+if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+  set(PEDANTIC_COMPILE_FLAGS -Wall -Wextra -Wshadow -pedantic)
+endif ()
+
+if (MASTER_PROJECT AND CMAKE_GENERATOR MATCHES "Visual Studio")
   # If Microsoft SDK is installed create script run-msbuild.bat that
-  # calls SetEnv.cmd to to set up build environment and runs msbuild.
+  # calls SetEnv.cmd to set up build environment and runs msbuild.
   # It is useful when building Visual Studio projects with the SDK
   # toolchain rather than Visual Studio.
   include(FindSetEnv)
@@ -44,85 +79,138 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
     ${CMAKE_MAKE_PROGRAM} -p:FrameworkPathOverride=\"${netfxpath}\" %*")
 endif ()
 
-set(FMT_SOURCES format.cc format.h)
-
 include(CheckSymbolExists)
 if (WIN32)
   check_symbol_exists(open io.h HAVE_OPEN)
 else ()
   check_symbol_exists(open fcntl.h HAVE_OPEN)
 endif ()
+
+function(add_headers VAR)
+  set(headers ${${VAR}})
+  foreach (header ${ARGN})
+    set(headers ${headers} include/fmt/${header})
+  endforeach()
+  set(${VAR} ${headers} PARENT_SCOPE)
+endfunction()
+
+# Define the fmt library, its includes and the needed defines.
+# format.cc is added to FMT_HEADERS for the header-only configuration.
+add_headers(FMT_HEADERS core.h format.h format.cc locale.h ostream.h printf.h
+                        time.h)
 if (HAVE_OPEN)
-  add_definitions(-DFMT_USE_FILE_DESCRIPTORS=1)
-  set(FMT_SOURCES ${FMT_SOURCES} posix.cc posix.h)
+  add_headers(FMT_HEADERS posix.h)
+  add_headers(FMT_SOURCES posix.cc)
 endif ()
 
-if (CPP11_FLAG)
-  set(CMAKE_REQUIRED_FLAGS ${CPP11_FLAG})
+add_library(fmt ${FMT_SOURCES} ${FMT_HEADERS} README.rst ChangeLog.rst)
+
+# Starting with CMake 3.1 the CXX_STANDARD property can be used instead.
+# Don't export -std since it may break projects that use other standards.
+target_compile_options(fmt PRIVATE ${CPP14_FLAG})
+if (FMT_PEDANTIC)
+  target_compile_options(fmt PRIVATE ${PEDANTIC_COMPILE_FLAGS})
 endif ()
 
-add_library(format ${FMT_SOURCES})
-if (CMAKE_COMPILER_IS_GNUCXX)
-  set_target_properties(format PROPERTIES COMPILE_FLAGS
-    "-Wall -Wextra -Wshadow -pedantic")
-endif ()
-if (CPP11_FLAG AND FMT_EXTRA_TESTS)
-  set_target_properties(format PROPERTIES COMPILE_FLAGS ${CPP11_FLAG})
-  # Test compilation with default flags.
-  file(GLOB src RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} test/*.cc test/*.h)
-  add_library(testformat STATIC ${FMT_SOURCE_FILES} ${src})
-endif ()
+target_include_directories(fmt PUBLIC
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
 
-add_subdirectory(doc)
+set_target_properties(fmt PROPERTIES
+  VERSION ${FMT_VERSION} SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
+  DEBUG_POSTFIX d)
 
-include_directories(. gmock)
-
-# We compile Google Test ourselves instead of using pre-compiled libraries.
-# See the Google Test FAQ "Why is it not recommended to install a
-# pre-compiled copy of Google Test (for example, into /usr/local)?"
-# at http://code.google.com/p/googletest/wiki/FAQ for more details.
-
-add_library(gmock STATIC gmock/gmock-gtest-all.cc)
-find_package(Threads)
-target_link_libraries(gmock ${CMAKE_THREAD_LIBS_INIT})
-
-# Check if variadic templates are working and not affected by GCC bug 39653:
-# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=39653
-check_cxx_source_compiles("
-  template <class T, class ...Types>
-  struct S { typedef typename S<Types...>::type type; };
-  int main() {}" FMT_VARIADIC_TEMPLATES)
-if (NOT FMT_VARIADIC_TEMPLATES)
-  add_definitions(-DGTEST_LANG_CXX11=0)
+if (BUILD_SHARED_LIBS)
+  if (UNIX AND NOT APPLE)
+    # Fix rpmlint warning:
+    # unused-direct-shlib-dependency /usr/lib/libformat.so.1.1.0 /lib/libm.so.6.
+    target_link_libraries(fmt -Wl,--as-needed)
+  endif ()
+  target_compile_definitions(fmt PRIVATE FMT_EXPORT INTERFACE FMT_SHARED)
 endif ()
 
-# GTest doesn't detect <tuple> with clang.
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  target_compile_definitions(gmock PUBLIC GTEST_USE_OWN_TR1_TUPLE=1)
+# Additionally define a header-only library when CMake is new enough.
+if (CMAKE_VERSION VERSION_GREATER 3.1.0 OR CMAKE_VERSION VERSION_EQUAL 3.1.0)
+  add_library(fmt-header-only INTERFACE)
+
+  target_compile_definitions(fmt-header-only INTERFACE FMT_HEADER_ONLY=1)
+
+  target_include_directories(fmt-header-only INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
 endif ()
 
-enable_testing()
-add_subdirectory(test)
+# Install targets.
+if (FMT_INSTALL)
+  include(GNUInstallDirs)
+  include(CMakePackageConfigHelpers)
+  set(FMT_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/fmt CACHE STRING
+    "Installation directory for cmake files, relative to ${CMAKE_INSTALL_PREFIX}.")
+  set(version_config ${PROJECT_BINARY_DIR}/fmt-config-version.cmake)
+  set(project_config ${PROJECT_BINARY_DIR}/fmt-config.cmake)
+  set(targets_export_name fmt-targets)
 
-if (EXISTS .gitignore)
+  set (INSTALL_TARGETS fmt)
+  if (TARGET fmt-header-only)
+    set(INSTALL_TARGETS ${INSTALL_TARGETS} fmt-header-only)
+  endif ()
+
+  set(FMT_LIB_DIR ${CMAKE_INSTALL_LIBDIR} CACHE STRING
+      "Installation directory for libraries, relative to ${CMAKE_INSTALL_PREFIX}.")
+
+  set(FMT_INC_DIR ${CMAKE_INSTALL_INCLUDEDIR}/fmt CACHE STRING
+      "Installation directory for include files, relative to ${CMAKE_INSTALL_PREFIX}.")
+
+  # Generate the version, config and target files into the build directory.
+  write_basic_package_version_file(
+    ${version_config}
+    VERSION ${FMT_VERSION}
+    COMPATIBILITY AnyNewerVersion)
+  configure_package_config_file(
+    ${PROJECT_SOURCE_DIR}/support/cmake/fmt-config.cmake.in
+    ${project_config}
+    INSTALL_DESTINATION ${FMT_CMAKE_DIR})
+  export(TARGETS ${INSTALL_TARGETS}
+         FILE ${PROJECT_BINARY_DIR}/${targets_export_name}.cmake)
+
+  # Install version, config and target files.
+  install(
+    FILES ${project_config} ${version_config}
+    DESTINATION ${FMT_CMAKE_DIR})
+  install(EXPORT ${targets_export_name} DESTINATION ${FMT_CMAKE_DIR})
+
+  # Install the library and headers.
+  install(TARGETS ${INSTALL_TARGETS} EXPORT ${targets_export_name}
+          DESTINATION ${FMT_LIB_DIR})
+  install(FILES ${FMT_HEADERS} DESTINATION ${FMT_INC_DIR})
+endif ()
+
+if (FMT_DOC)
+  add_subdirectory(doc)
+endif ()
+
+if (FMT_TEST)
+  enable_testing()
+  add_subdirectory(test)
+endif ()
+
+set(gitignore ${PROJECT_SOURCE_DIR}/.gitignore)
+if (MASTER_PROJECT AND EXISTS ${gitignore})
   # Get the list of ignored files from .gitignore.
-  file (STRINGS ".gitignore" lines)
+  file (STRINGS ${gitignore} lines)
   LIST(REMOVE_ITEM lines /doc/html)
   foreach (line ${lines})
     string(REPLACE "." "[.]" line "${line}")
     string(REPLACE "*" ".*" line "${line}")
     set(ignored_files ${ignored_files} "${line}$" "${line}/")
   endforeach ()
-  set(ignored_files ${ignored_files} /.git /breathe /format-benchmark sphinx/)
+  set(ignored_files ${ignored_files}
+    /.git /breathe /format-benchmark sphinx/ .buildinfo .doctrees)
 
   set(CPACK_SOURCE_GENERATOR ZIP)
   set(CPACK_SOURCE_IGNORE_FILES ${ignored_files})
-  set(CPACK_PACKAGE_VERSION_MAJOR 1)
-  set(CPACK_PACKAGE_VERSION_MINOR 0)
-  set(CPACK_PACKAGE_VERSION_PATCH 1)
-  set(CPPFORMAT_VERSION
-    ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH})
-  set(CPACK_SOURCE_PACKAGE_FILE_NAME cppformat-${CPPFORMAT_VERSION})
-  set(CPACK_RESOURCE_FILE_README ${FORMAT_SOURCE_DIR}/README.rst)
+  set(CPACK_SOURCE_PACKAGE_FILE_NAME fmt-${FMT_VERSION})
+  set(CPACK_PACKAGE_NAME fmt)
+  set(CPACK_RESOURCE_FILE_README ${PROJECT_SOURCE_DIR}/README.rst)
   include(CPack)
 endif ()

@@ -1,11 +1,12 @@
-foreach (program doxygen sphinx-build)
-  find_program(${program} ${program})
-  if (NOT ${program})
-    message(STATUS "Target 'doc' disabled (requires ${program})")
-    return ()
-  endif ()
-endforeach ()
+find_program(DOXYGEN doxygen)
+if (NOT DOXYGEN)
+  message(STATUS "Target 'doc' disabled (requires doxygen)")
+  return ()
+endif ()
 
 add_custom_target(doc
-  COMMAND ${doxygen}
-  COMMAND ${sphinx-build} -b html . html)
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build.py ${FMT_VERSION}
+  SOURCES api.rst syntax.rst build.py conf.py _templates/layout.html)
+
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/
+        DESTINATION share/doc/fmt OPTIONAL)

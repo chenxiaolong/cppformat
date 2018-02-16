@@ -25,28 +25,47 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Include format.cc instead of format.h to test implementation-specific stuff.
-#include "format.cc"
+#define FMT_NOEXCEPT
+#undef FMT_SHARED
+#include "test-assert.h"
 
+// Include format.cc instead of format.h to test implementation-specific stuff.
+#include "fmt/format.cc"
+#include "fmt/printf.h"
+
+#include <algorithm>
 #include <cstring>
 
+#include "gmock/gmock.h"
 #include "gtest-extra.h"
 #include "util.h"
 
+#undef min
 #undef max
 
+template <typename T>
+struct ValueExtractor {
+  T operator()(T value) {
+    return value;
+  }
+
+  template <typename U>
+  T operator()(U) {
+    throw std::runtime_error(fmt::format("invalid type {}", typeid(U).name()));
+    return T();
+  }
+};
+
 TEST(FormatTest, ArgConverter) {
-  using fmt::internal::Arg;
-  Arg arg = Arg();
-  arg.type = Arg::LONG_LONG;
-  arg.long_long_value = std::numeric_limits<fmt::LongLong>::max();
-  ArgConverter<fmt::LongLong>(arg, 'd').visit(arg);
-  EXPECT_EQ(Arg::LONG_LONG, arg.type);
+  long long value = std::numeric_limits<long long>::max();
+  auto arg = fmt::internal::make_arg<fmt::context>(value);
+  visit(fmt::internal::ArgConverter<long long, fmt::context>(arg, 'd'), arg);
+  EXPECT_EQ(value, visit(ValueExtractor<long long>(), arg));
 }
 
 TEST(FormatTest, FormatNegativeNaN) {
   double nan = std::numeric_limits<double>::quiet_NaN();
-  if (fmt::internal::getsign(-nan))
+  if (fmt::internal::fputil::isnegative(-nan))
     EXPECT_EQ("-nan", fmt::format("{}", -nan));
   else
     fmt::print("Warning: compiler doesn't handle negative NaN correctly");
@@ -55,12 +74,11 @@ TEST(FormatTest, FormatNegativeNaN) {
 TEST(FormatTest, StrError) {
   char *message = 0;
   char buffer[BUFFER_SIZE];
-#ifndef NDEBUG
-  EXPECT_DEBUG_DEATH(safe_strerror(EDOM, message = 0, 0), "Assertion");
-  EXPECT_DEBUG_DEATH(safe_strerror(EDOM, message = buffer, 0), "Assertion");
-#endif
+  EXPECT_ASSERT(fmt::safe_strerror(EDOM, message = 0, 0), "invalid buffer");
+  EXPECT_ASSERT(fmt::safe_strerror(EDOM, message = buffer, 0),
+                "invalid buffer");
   buffer[0] = 'x';
-#ifdef _GNU_SOURCE
+#if defined(_GNU_SOURCE) && !defined(__COVERITY__)
   // Use invalid error code to make sure that safe_strerror returns an error
   // message in the buffer rather than a pointer to a static string.
   int error_code = -1;
@@ -68,7 +86,7 @@ TEST(FormatTest, StrError) {
   int error_code = EDOM;
 #endif
 
-  int result = safe_strerror(error_code, message = buffer, BUFFER_SIZE);
+  int result = fmt::safe_strerror(error_code, message = buffer, BUFFER_SIZE);
   EXPECT_EQ(0, result);
   std::size_t message_size = std::strlen(message);
   EXPECT_GE(BUFFER_SIZE - 1u, message_size);
@@ -76,9 +94,9 @@ TEST(FormatTest, StrError) {
 
   // safe_strerror never uses buffer on MinGW.
 #ifndef __MINGW32__
-  result = safe_strerror(error_code, message = buffer, message_size);
+  result = fmt::safe_strerror(error_code, message = buffer, message_size);
   EXPECT_EQ(ERANGE, result);
-  result = safe_strerror(error_code, message = buffer, 1);
+  result = fmt::safe_strerror(error_code, message = buffer, 1);
   EXPECT_EQ(buffer, message);  // Message should point to buffer.
   EXPECT_EQ(ERANGE, result);
   EXPECT_STREQ("", message);
@@ -88,25 +106,33 @@ TEST(FormatTest, StrError) {
 TEST(FormatTest, FormatErrorCode) {
   std::string msg = "error 42", sep = ": ";
   {
-    fmt::MemoryWriter w;
-    w << "garbage";
-    format_error_code(w, 42, "test");
-    EXPECT_EQ("test: " + msg, w.str());
+    fmt::memory_buffer buffer;
+    format_to(buffer, "garbage");
+    fmt::format_error_code(buffer, 42, "test");
+    EXPECT_EQ("test: " + msg, to_string(buffer));
   }
   {
-    fmt::MemoryWriter w;
+    fmt::memory_buffer buffer;
     std::string prefix(
         fmt::internal::INLINE_BUFFER_SIZE - msg.size() - sep.size() + 1, 'x');
-    format_error_code(w, 42, prefix);
-    EXPECT_EQ(msg, w.str());
+    fmt::format_error_code(buffer, 42, prefix);
+    EXPECT_EQ(msg, to_string(buffer));
   }
-  {
-    fmt::MemoryWriter w;
+  int codes[] = {42, -1};
+  for (std::size_t i = 0, n = sizeof(codes) / sizeof(*codes); i < n; ++i) {
+    // Test maximum buffer size.
+    msg = fmt::format("error {}", codes[i]);
+    fmt::memory_buffer buffer;
     std::string prefix(
         fmt::internal::INLINE_BUFFER_SIZE - msg.size() - sep.size(), 'x');
-    format_error_code(w, 42, prefix);
-    EXPECT_EQ(prefix + sep + msg, w.str());
+    fmt::format_error_code(buffer, codes[i], prefix);
+    EXPECT_EQ(prefix + sep + msg, to_string(buffer));
     std::size_t size = fmt::internal::INLINE_BUFFER_SIZE;
-    EXPECT_EQ(size, w.size());
+    EXPECT_EQ(size, buffer.size());
+    buffer.resize(0);
+    // Test with a message that doesn't fit into the buffer.
+    prefix += 'x';
+    fmt::format_error_code(buffer, codes[i], prefix);
+    EXPECT_EQ(msg, to_string(buffer));
   }
 }
